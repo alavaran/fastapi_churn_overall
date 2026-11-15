@@ -1,35 +1,33 @@
 # Customer Churn Prediction API
 
-A machine learning service for predicting customer churn probability using **Python, FastAPI, and scikit-learn**.
+A machine learning REST API built with **Python, FastAPI, Pandas and Scikit-learn** to predict customer churn.
 
-The project demonstrates an end-to-end ML workflow: dataset loading, preprocessing, model training, evaluation, persistence, and real-time predictions through a REST API.
+The service supports model training, single and batch predictions, model metrics, training history, structured error handling and Docker deployment.
 
 ## Features
 
-- **REST API** built with FastAPI.
-- **Data validation** using Pydantic.
-- **Dataset inspection** and validation endpoints.
-- **Automated preprocessing** with scikit-learn Pipeline and ColumnTransformer.
-- **Machine learning model** based on Logistic Regression.
-- **Model evaluation** using Accuracy, Precision, Recall, F1-score, and ROC-AUC.
-- **Model persistence** with Joblib.
-- **Single and batch predictions**.
-- **Churn probability estimation** for each customer.
-- **Interactive API documentation** with Swagger UI.
+- Train machine learning models through REST API.
+- Supported classifiers: Logistic Regression and Random Forest.
+- Scikit-learn preprocessing Pipeline with numerical and categorical feature handling.
+- Single-customer and batch churn predictions.
+- Churn probability for each prediction.
+- Model status and feature schema endpoints.
+- Training metrics and persistent training history.
+- Structured API error responses.
+- Application logging and health checks.
+- Docker support.
+- Unit and integration tests with Pytest.
 
 ## Tech Stack
 
-| Technology | Purpose |
-|---|---|
-| Python | Core programming language |
-| FastAPI | REST API framework |
-| Pydantic | Request and response validation |
-| Pandas | Data processing |
-| scikit-learn | Machine learning and preprocessing |
-| Joblib | Model serialization |
-| Uvicorn | ASGI server |
-| Pytest | Automated testing |
-| Docker | Containerization |
+- Python
+- FastAPI
+- Pydantic
+- Pandas
+- Scikit-learn
+- Joblib
+- Pytest
+- Docker
 
 ## Project Structure
 
@@ -40,80 +38,62 @@ fastapi_churn_overall/
 │   └── churn_dataset.csv
 │
 ├── models/
-│   └── churn_model.joblib
+│   ├── churn_model.joblib
+│   └── training_history.json
 │
 ├── tests/
+│   ├── conftest.py
+│   ├── test_api.py
+│   ├── test_dataset.py
+│   └── test_model.py
 │
 ├── main.py
-├── schemas.py
 ├── dataset.py
 ├── model.py
 ├── model_storage.py
+├── schemas.py
+├── errors.py
+├── training_history.py
+├── logging_config.py
 │
 ├── requirements.txt
 ├── Dockerfile
+├── .dockerignore
 └── README.md
 ```
 
-*The structure may evolve as the project develops.*
-
 ## Dataset
 
-The service uses a customer churn dataset containing numerical and categorical features.
+The service uses `data/churn_dataset.csv`.
+
+Each row represents one customer. The target variable is `churn`:
+
+- `0` — customer retained.
+- `1` — customer churned.
+
+### Features
 
 | Feature | Description | Type |
 |---|---|---|
-| monthly_fee | Monthly subscription fee | Numerical |
-| usage_hours | Customer usage hours | Numerical |
-| support_requests | Number of support requests | Numerical |
-| account_age_months | Account age in months | Numerical |
-| failed_payments | Number of failed payments | Numerical |
-| region | Customer region | Categorical |
-| device_type | Device used by customer | Categorical |
-| payment_method | Payment method | Categorical |
-| autopay_enabled | Automatic payment enabled | Binary |
-| churn | Customer churn indicator | Target |
+| `monthly_fee` | Customer's monthly subscription fee | Numeric |
+| `usage_hours` | Customer's usage hours | Numeric |
+| `support_requests` | Number of support requests | Numeric |
+| `account_age_months` | Account age in months | Numeric |
+| `failed_payments` | Number of failed payments | Numeric |
+| `autopay_enabled` | Whether automatic payments are enabled (0/1) | Numeric |
+| `region` | Customer's region | Categorical |
+| `device_type` | Device type: mobile, desktop or tablet | Categorical |
+| `payment_method` | Payment method: card, PayPal or crypto | Categorical |
+| `churn` | Target variable (0/1) | Target |
 
-Target variable:
-- `0` — customer stays.
-- `1` — customer churns.
+The preprocessing pipeline handles numerical and categorical features separately.
 
-## Machine Learning Pipeline
-
-The model uses a scikit-learn Pipeline with separate preprocessing for numerical and categorical features.
-
-**Numerical features:**
-- Missing value imputation using median.
-- Feature scaling using StandardScaler.
-
-**Categorical features:**
-- Missing value imputation using most frequent value.
-- One-hot encoding with unknown category handling.
-
-**Classifier:**
-- Logistic Regression.
-
-The preprocessing steps are fitted on the training data to avoid data leakage.
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/` | Service health check |
-| GET | `/dataset/preview` | Preview dataset records |
-| GET | `/dataset/info` | Dataset information |
-| GET | `/dataset/validate` | Dataset validation |
-| GET | `/dataset/split-info` | Training/test split information |
-| POST | `/model/train` | Train the churn prediction model |
-| GET | `/model/status` | Get model status and metrics |
-| POST | `/predict` | Predict churn for one or multiple customers |
-
-## Getting Started
+## Installation and Local Setup
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/fastapi_churn_overall.git
+git clone https://github.com/alavaran/fastapi_churn_overall
 cd fastapi_churn_overall
 ```
 
@@ -126,11 +106,13 @@ python -m venv .venv
 Activate it:
 
 **Windows PowerShell:**
+
 ```powershell
-.\.venv\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1
 ```
 
 **Linux / macOS:**
+
 ```bash
 source .venv/bin/activate
 ```
@@ -141,7 +123,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Run the application
+### 4. Start the API
 
 ```bash
 python -m uvicorn main:app --reload
@@ -149,25 +131,60 @@ python -m uvicorn main:app --reload
 
 The API will be available at:
 
-```text
-http://127.0.0.1:8000
+- API: http://localhost:8000
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+- Health check: http://localhost:8000/health
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/` | Root endpoint |
+| GET | `/health` | Service health check |
+| POST | `/model/train` | Train a churn prediction model |
+| GET | `/model/status` | Get model status |
+| GET | `/model/schema` | Get expected feature schema |
+| GET | `/model/metrics` | Get training metrics and history |
+| POST | `/predict` | Predict customer churn |
+
+## Model Training
+
+Train a Logistic Regression model:
+
+**POST** `/model/train`
+
+Request:
+
+```json
+{
+  "model_type": "logreg",
+  "hyperparameters": {}
+}
 ```
 
-Interactive API documentation:
+The service also supports:
 
-```text
-http://127.0.0.1:8000/docs
+```json
+{
+  "model_type": "random_forest",
+  "hyperparameters": {}
+}
 ```
 
-## Example: Train the Model
+Hyperparameters are passed to the corresponding Scikit-learn classifier.
 
-```bash
-curl -X POST "http://127.0.0.1:8000/model/train"
-```
+After successful training, the service saves the model and records the training timestamp, model type, hyperparameters and evaluation metrics.
 
-## Example: Single Customer Prediction
+## Churn Prediction
 
-**Request:**
+**POST** `/predict`
+
+The endpoint accepts either a single customer object or a list of customer objects.
+
+### Single customer
+
+Request:
 
 ```json
 {
@@ -176,28 +193,22 @@ curl -X POST "http://127.0.0.1:8000/model/train"
   "support_requests": 4,
   "account_age_months": 3,
   "failed_payments": 2,
+  "autopay_enabled": 0,
   "region": "europe",
   "device_type": "mobile",
-  "payment_method": "card",
-  "autopay_enabled": 0
+  "payment_method": "card"
 }
 ```
 
-**Response:**
+The response includes:
 
-```json
-{
-  "churn": 1,
-  "probability_no_churn": 0.2932,
-  "probability_churn": 0.7068
-}
-```
+- `churn` — predicted class (0 or 1).
+- `probability_no_churn` — probability of customer retention.
+- `probability_churn` — probability of customer churn.
 
-The probabilities represent the model's estimated likelihood of each outcome.
+### Batch prediction
 
-## Example: Batch Prediction
-
-The `/predict` endpoint also supports a list of customers.
+The same endpoint accepts an array of customer objects:
 
 ```json
 [
@@ -207,76 +218,140 @@ The `/predict` endpoint also supports a list of customers.
     "support_requests": 4,
     "account_age_months": 3,
     "failed_payments": 2,
+    "autopay_enabled": 0,
     "region": "europe",
     "device_type": "mobile",
-    "payment_method": "card",
-    "autopay_enabled": 0
+    "payment_method": "card"
   },
   {
-    "monthly_fee": 29.99,
-    "usage_hours": 85.0,
-    "support_requests": 0,
-    "account_age_months": 24,
+    "monthly_fee": 79.99,
+    "usage_hours": 35.0,
+    "support_requests": 1,
+    "account_age_months": 18,
     "failed_payments": 0,
+    "autopay_enabled": 1,
     "region": "asia",
     "device_type": "desktop",
-    "payment_method": "paypal",
-    "autopay_enabled": 1
+    "payment_method": "paypal"
   }
 ]
 ```
 
-The response contains an individual prediction for each customer, preserving the input order.
+An empty list is rejected with a structured validation error.
 
-## Model Evaluation
+A model must be trained or loaded before predictions can be made.
 
-The model is evaluated using:
+## Model Metrics and Training History
 
-- **Accuracy** — overall prediction accuracy.
-- **Precision** — proportion of predicted churn cases that are actual churn cases.
-- **Recall** — proportion of actual churn cases identified by the model.
-- **F1-score** — harmonic mean of Precision and Recall.
-- **ROC-AUC** — ability to distinguish between churn and non-churn customers.
+**GET** `/model/metrics`
 
-For churn prediction, Recall and F1-score are particularly important because missing customers who are likely to churn can have a significant business impact.
+Returns training records containing:
+
+- Training timestamp (UTC).
+- Model type.
+- Hyperparameters.
+- Evaluation metrics.
+
+Optional query parameters:
+
+- `model_type` — filter by `logreg` or `random_forest`.
+- `limit` — number of latest records (1–100).
+
+Example:
+
+```text
+GET /model/metrics?model_type=logreg&limit=5
+```
+
+Training history is stored in `models/training_history.json`.
 
 ## Error Handling
 
-The API validates incoming data and returns appropriate HTTP errors.
+The API uses a consistent error response structure:
 
-For example:
-- `422 Unprocessable Entity` — invalid request data.
-- `503 Service Unavailable` — model has not been trained or loaded yet.
+```json
+{
+  "code": "MODEL_NOT_TRAINED",
+  "message": "Model has not been trained",
+  "details": null
+}
+```
 
-## Development Roadmap
+HTTP validation errors and application errors are handled centrally. Internal exception details are not exposed to API clients.
 
-- [x] FastAPI application setup.
-- [x] Dataset loading and inspection.
-- [x] Data validation and preprocessing.
-- [x] Train/test split.
-- [x] Scikit-learn Pipeline.
-- [x] Model training and evaluation.
-- [x] Model persistence.
-- [x] Single customer prediction.
-- [x] Batch prediction.
-- [x] API documentation and examples.
-- [ ] Configurable model selection and hyperparameters.
-- [ ] Extended automated API tests.
-- [ ] Docker deployment.
-- [ ] Final integration and deployment improvements.
+## Docker
 
-## Project Goals
+### 1. Build the image
 
-This project is built as a practical exercise in developing and deploying machine learning services.
+```bash
+docker build -t churn-api .
+```
 
-It focuses on:
-- Designing REST APIs for ML applications.
-- Building reusable preprocessing and training pipelines.
-- Preventing data leakage.
-- Persisting and serving trained models.
-- Validating API inputs and outputs.
-- Evaluating classification models from a business perspective.
+### 2. Run the container
+
+```bash
+docker run -d --name churn-api -p 8000:8000 churn-api
+```
+
+### 3. Check the service
+
+Open:
+
+- http://localhost:8000/health
+- http://localhost:8000/docs
+
+### 4. View container logs
+
+```bash
+docker logs churn-api
+```
+
+### 5. Stop the container
+
+```bash
+docker stop churn-api
+```
+
+To remove it:
+
+```bash
+docker rm churn-api
+```
+
+## Testing
+
+The project uses Pytest for unit and integration testing.
+
+Run all tests:
+
+```bash
+python -m pytest -v
+```
+
+The test suite covers:
+
+- Dataset preparation and validation.
+- Model training with supported classifiers.
+- API prediction without a trained model.
+- Invalid prediction input.
+- End-to-end model training and prediction flow.
+
+## Model Persistence
+
+The trained Scikit-learn Pipeline is serialized using Joblib.
+
+The service can load a previously saved model during application startup, allowing predictions without retraining when a compatible model artifact is available.
+
+Training history is persisted separately as JSON.
+
+## Future Improvements
+
+- CI/CD integration with GitHub Actions.
+- Model performance monitoring.
+- Data drift detection.
+- Model versioning.
+- Automated retraining workflows.
 
 ---
 
-**Status:** In development.
+**Project status:** Completed educational project.

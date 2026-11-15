@@ -1,9 +1,12 @@
-import pandas as pd
-
+import logging
 from pathlib import Path
-from schemas import DatasetRowChurn
 
+import pandas as pd
 from sklearn.model_selection import train_test_split
+
+from errors import ServiceError
+
+logger = logging.getLogger(__name__)
 
 TARGET = "churn"
 
@@ -22,85 +25,66 @@ CATEGORICAL_FEATURES = [
     "payment_method",
 ]
 
+FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 DATASET_PATH = Path(__file__).parent / "data" / "churn_dataset.csv"
 
 
 def load_dataset() -> pd.DataFrame:
-    df = pd.read_csv(DATASET_PATH)
-    return df
+    logger.info("Loading churn dataset")
 
+    try:
+        df = pd.read_csv(DATASET_PATH)
+        logger.info(
+            "Churn dataset loaded successfully: %s rows",
+            len(df),
+        )
+        return df
 
-def load_dataset_rows() -> list[DatasetRowChurn]:
-    df = load_dataset()
+    except pd.errors.EmptyDataError:
+        logger.error("Churn dataset is empty")
+        return pd.DataFrame()
 
-    rows = df.to_dict(orient="records")
-
-    return [
-        DatasetRowChurn.model_validate(row)
-        for row in rows
-    ]
-
-def prepare_dataset():
-    df = load_dataset()
-
-    # Разделяем признаки и целевую переменную
-    X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
-    y = df[TARGET]
-
-    # Удаляем строки, где неизвестна целевая переменная
-    valid_target = y.notna()
-    X = X.loc[valid_target].copy()
-    y = y.loc[valid_target].copy()
-
-    # Делим данные на train и test
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        random_state=42,
-        stratify=y,
-    )
-
-    # Заполняем пропуски числовых признаков медианами train
-    for column in NUMERIC_FEATURES:
-        median = X_train[column].median()
-        X_train[column] = X_train[column].fillna(median)
-        X_test[column] = X_test[column].fillna(median)
-
-    # Заполняем пропуски категориальных признаков модой train
-    for column in CATEGORICAL_FEATURES:
-        mode = X_train[column].mode()
-
-        if not mode.empty:
-            most_frequent = mode.iloc[0]
-            X_train[column] = X_train[column].fillna(most_frequent)
-            X_test[column] = X_test[column].fillna(most_frequent)
-
-    return X_train, X_test, y_train, y_test
-
-def get_class_distribution(y: pd.Series) -> dict:
-    return y.value_counts().sort_index().to_dict()
+    except FileNotFoundError:
+        logger.exception("Churn dataset file not found")
+        raise
+    
 
 def prepare_dataset():
     df = load_dataset()
 
     if df.empty:
-        raise ValueError("Dataset is empty")
+        raise ServiceError(
+            code="DATASET_EMPTY",
+            message="Датасет пуст",
+            status_code=422,
+        )
 
-    if TARGET not in df.columns:
-        raise ValueError("Target column 'churn' is missing")
+    required_columns = FEATURES + [TARGET]
+    missing_columns = [
+        column for column in required_columns
+        if column not in df.columns
+    ]
+
+    if missing_columns:
+        raise ValueError(
+            f"Dataset is missing columns: {missing_columns}"
+        )
 
     df = df.dropna(subset=[TARGET])
 
     if df.empty:
-        raise ValueError("Dataset has no valid target values")
+        raise ServiceError(
+            code="DATASET_EMPTY",
+            message="В датасете отсутствуют строки с корректным target",
+            status_code=422,
+        )
 
     if df[TARGET].nunique() < 2:
         raise ValueError("Dataset must contain both churn classes")
 
-    X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
-    y = df[TARGET]
+    X = df[FEATURES].copy()
+    y = df[TARGET].copy()
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
@@ -111,3 +95,7 @@ def prepare_dataset():
     )
 
     return X_train, X_test, y_train, y_test
+
+
+def get_class_distribution(y: pd.Series) -> dict:
+    return y.value_counts().sort_index().to_dict()
